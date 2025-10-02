@@ -1,0 +1,35 @@
+from playwright.sync_api import expect
+
+from core.base_test import BaseTest
+from pages.dashboard_page import DashboardPage
+from pages.login_page import LoginPage
+
+
+class TestDemoAdminLogin(BaseTest):
+    """测试演示管理员账号登录"""
+    def setUp(self):
+        """测试前置设置"""
+        super().setUp()
+        self.login_page = LoginPage(self.page)
+        self.dashboard_page = DashboardPage(self.page)
+
+    def test_demo_admin_login(self):
+        self.login_page.navigate()
+
+        # 点击演示管理员账号
+        self.login_page.click_demo_admin_button()
+
+        # 等待表单填充完成
+        self.page.wait_for_timeout(500)
+
+        # 验证表单自动填充
+        username = self.login_page.get_username_value()
+        password = self.login_page.get_password_value()
+        assert username == "admin"
+        assert password == "admin123"
+
+        # 提交登录
+        self.login_page.click_login_button()
+
+        # 验证登录成功
+        expect(self.page).to_have_url(self.dashboard_page.url)
