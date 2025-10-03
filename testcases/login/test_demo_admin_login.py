@@ -14,6 +14,7 @@ class TestDemoAdminLogin(BaseTest):
         self.dashboard_page = DashboardPage(self.page)
 
     def test_demo_admin_login(self):
+        """测试演示管理员账号登录"""
         self.login_page.navigate()
 
         # 点击演示管理员账号

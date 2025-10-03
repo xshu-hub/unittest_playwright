@@ -42,6 +42,7 @@ test-results/
 reports/
 videos/
 screenshots/
+allure-results/
 
 # OS-specific
 .DS_Store

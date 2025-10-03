@@ -67,7 +67,7 @@ logging:
     fmt: "%(asctime)s [%(levelname)s] %(name)s: %(message)s"
     datefmt: "%Y-%m-%d %H:%M:%S"
   # 每个级别单独文件（true 时分别写入 debug/info/warning/error.log）
-  per_level_files: false
+  per_level_files: true
 
 # 截图配置
 screenshots:
@@ -92,3 +92,30 @@ videos:
   size:
     width: 1280
     height: 720
+
+# Allure 配置（报告与标签、附件策略）
+allure:
+  # 结果与报告目录
+  results_dir: "reports/allure-results"
+  report_dir: "reports/allure-report"
+
+  # 标签策略（保持顶级子包为 parentSuite 与 package）
+  labels:
+    derive_parent_suite: "top_level_subpackage"
+    package_strategy: "top_level"
+    enable_subsuite: false
+
+  # 附件策略
+  attachments:
+    screenshot_on_failure: true
+    video_on_failure: true
+
+  # 环境附加信息（将合并到 environment.properties）
+  environment:
+    extra: {}
+
+  # 自定义分类规则文件（可选），如存在则覆盖默认分类
+  categories_file: null
+
+  # 执行器信息（可选），显示在报告信息面板
+  executor: null

@@ -69,7 +69,7 @@ class VideoRecorder:
         base = f"{prefix}{class_name}.{method_name}.{self._timestamp()}"
         return os.path.join(self.videos_dir, base + ".webm")
 
-    def handle_test_teardown(self, page, class_name: str, method_name: str, result) -> None:
+    def handle_test_teardown(self, page, class_name: str, method_name: str, result):
         """
         在测试结束时处理视频文件：保存或删除。
         注意：Playwright 仅在页面关闭后生成视频文件。
@@ -77,10 +77,10 @@ class VideoRecorder:
         """
         try:
             if not videos_config.enabled():
-                return
+                return None
 
             if (not page) or page.is_closed():
-                return
+                return None
 
             # 根据模式决定是否保留成功用例视频
             keep_success = videos_config.record_all()
@@ -96,7 +96,7 @@ class VideoRecorder:
             # 视频对象获取
             video = getattr(page, "video", None)
             if not video:
-                return
+                return None
 
             # 失败判断（统一调用公共工具）
             failed = _is_failed(result, class_name, method_name)
@@ -131,10 +131,12 @@ class VideoRecorder:
                     except Exception as e:
                         logger.warning(f"删除临时视频文件时出现异常: {e}")
                     logger.error(f"测试方法 {method_name} 视频保存: {target_path}")
+                    return target_path
                 except Exception as e:
                     logger.debug(f"保存视频时出现异常: {e}")
                     import traceback as tb
                     logger.debug(tb.format_exc())
+                    return None
             else:
                 # 成功用例且仅失败模式：删除临时文件（节省空间）
                 try:
@@ -146,7 +148,9 @@ class VideoRecorder:
                     logger.error(f"删除临时视频文件时出现异常: {e}")
                     # 删除失败不影响测试流程
                     pass
+                return None
         except Exception as e:
             logger.error(f"视频处理时出现异常: {e}")
             import traceback as tb
             logger.debug(tb.format_exc())
+            return None

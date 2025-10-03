@@ -29,7 +29,7 @@ class ScreenshotHelper:
         ts = datetime.now().strftime("%Y%m%d-%H%M%S")
         return f"failed_{class_name}.{method_name}.{ts}"
 
-    def capture_on_failure(self, page, class_name: str, method_name: str, result, logger) -> None:
+    def capture_on_failure(self, page, class_name: str, method_name: str, result, logger):
         """
         如果当前用例失败，则根据配置捕获截图。
         """
@@ -66,6 +66,8 @@ class ScreenshotHelper:
             page.screenshot(path=screenshot_path, full_page=full_page, type=image_type, mask=mask or None)
 
             logger.error(f"测试方法 {method_name} 失败截图已保存: {screenshot_path}")
+            return screenshot_path
         except Exception as e:
             logger.debug(f"失败截图采集时出现异常: {e}")
             logger.debug(traceback.format_exc())
+            return None

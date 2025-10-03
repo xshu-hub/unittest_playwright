@@ -16,6 +16,7 @@ from utils.logger import get_logger
 from utils.screenshot import ScreenshotHelper
 from utils.video import VideoRecorder
 from config.videos_config import videos_config
+from utils.allure.hooks import allure_hooks
 
 logger = get_logger(__name__)
 screenshot_helper = ScreenshotHelper()
@@ -63,8 +64,11 @@ class BaseTest(unittest.TestCase):
             timeout_config = browser_config.get_timeout_config()
             cls.browser_manager.set_default_timeout(timeout_config.get("default", 10000))
             cls.browser_manager.set_default_navigation_timeout(timeout_config.get("navigation", 30000))
-            
+
             logger.debug(f"测试类 {cls.__name__} 初始化完成")
+
+            # Allure类容器与环境信息
+            allure_hooks.on_class_setup(cls.__name__, browser_config_data)
             
         except Exception as e:
             logger.error(f"测试类 {cls.__name__} 初始化失败: {str(e)}")
@@ -84,6 +88,8 @@ class BaseTest(unittest.TestCase):
                 cls.browser_manager.close_browser()
                 cls.browser_manager = None
                 cls.page = None
+
+            allure_hooks.on_class_teardown(cls.__name__)
                 
             logger.debug(f"测试类 {cls.__name__} 清理完成")
             logger.info("=" * 50)
@@ -122,6 +128,9 @@ class BaseTest(unittest.TestCase):
                 self.page and (not self.page.is_closed()) and 
                 self.page.evaluate("localStorage.clear(); sessionStorage.clear();")
             ))
+
+            # Allure 开始测试用例
+            allure_hooks.on_test_setup(self)
             
         except Exception as e:
             logger.error(f"测试方法 {self._testMethodName} 初始化失败: {str(e)}")
@@ -147,7 +156,7 @@ class BaseTest(unittest.TestCase):
                 if result:
                     self._record_failure_details(result)
                     # 在失败场景下捕获截图（使用工具类）
-                    screenshot_helper.capture_on_failure(
+                    screenshot_path = screenshot_helper.capture_on_failure(
                         page=self.page,
                         class_name=self.__class__.__name__,
                         method_name=self._testMethodName,
@@ -165,7 +174,7 @@ class BaseTest(unittest.TestCase):
                         logger.debug(traceback.format_exc())
                     # 视频处理：保存或丢弃视频（需在页面关闭后）
                     try:
-                        video_recorder.handle_test_teardown(
+                        video_path = video_recorder.handle_test_teardown(
                             page=self.page,
                             class_name=self.__class__.__name__,
                             method_name=self._testMethodName,
@@ -174,6 +183,10 @@ class BaseTest(unittest.TestCase):
                     except Exception as e:
                         logger.debug(f"处理测试视频时出现异常: {str(e)}")
                         logger.debug(traceback.format_exc())
+                        video_path = None
+                    # Allure 附件与状态
+                    allure_hooks.on_test_teardown(self, result, screenshot_path, video_path)
+
                     self._log_test_summary(result)
             except Exception as e:
                 # 防御性处理：不影响测试结果
