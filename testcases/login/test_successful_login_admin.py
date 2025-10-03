@@ -9,7 +9,8 @@ class TestSuccessfulLoginAdmin(BaseTest):
     """测试管理员成功登录"""
 
     def setUp(self):
-        """测试前置设置"""
+        """测试前置设置：初始化页面对象"""
+        super().setUp()
         self.login_page = LoginPage(self.page)
         self.dashboard_page = DashboardPage(self.page)
 
