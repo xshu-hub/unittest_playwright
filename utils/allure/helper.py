@@ -19,7 +19,7 @@ from allure_commons.model2 import (
 
 from utils.logger import get_logger
 from config.allure_config import allure_config
-
+project_root = Path(__file__).parent.parent.parent
 logger = get_logger(__name__)
 class StepContext:
     """Allure 步骤上下文管理器，便于记录详细步骤。
@@ -76,7 +76,7 @@ class AllureHelper:
     """
 
     def __init__(self, results_dir: Optional[str] = None) -> None:
-        self.results_dir = Path(results_dir or "allure-results")
+        self.results_dir = Path(f"{project_root}/{results_dir}" or f"{project_root}/allure-results")
         self.results_dir.mkdir(parents=True, exist_ok=True)
 
         # 注册 AllureReporter 与文件写入器，驱动 commons 生命周期

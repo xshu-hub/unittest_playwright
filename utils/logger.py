@@ -25,7 +25,7 @@ from logging.handlers import RotatingFileHandler, TimedRotatingFileHandler
 
 
 _LOGGING_CONFIGURED = False
-
+project_root = Path(__file__).parent.parent
 
 class _LevelFilter(logging.Filter):
     """只允许某个固定级别的日志通过的过滤器"""
@@ -41,7 +41,7 @@ class _LevelFilter(logging.Filter):
 def _load_logging_config(config_path: Optional[str] = None) -> Dict[str, Any]:
     """从项目根目录下的 config.yaml 加载日志配置，若不存在则使用默认配置"""
     if config_path is None:
-        project_root = Path(__file__).parent.parent
+
         config_path = str(project_root / "config.yaml")
 
     defaults: Dict[str, Any] = {
@@ -105,7 +105,8 @@ def setup_logging(config_path: Optional[str] = None) -> None:
     root_logger.setLevel(level)
 
     # 日志目录
-    log_dir = Path(log_cfg.get("directory", "logs"))
+    log_cfg_path = log_cfg.get("directory", "logs")
+    log_dir = Path(f"{project_root}/{log_cfg_path}")
     log_dir.mkdir(parents=True, exist_ok=True)
 
     rotation = log_cfg.get("rotation", {})
