@@ -12,12 +12,10 @@ from playwright.sync_api import Page
 
 from core.browser_manager import BrowserManager
 from config.browser_config import browser_config
-from utils.logger import get_logger
+from utils.cmbird_logger import logger, set_current_logger, clear_current_logger
 from utils.screenshot import ScreenshotHelper
 from utils.video import VideoRecorder
 from config.videos_config import videos_config
-
-logger = get_logger(__name__)
 screenshot_helper = ScreenshotHelper()
 video_recorder = VideoRecorder()
 
@@ -85,6 +83,8 @@ class BaseTest(unittest.TestCase):
         在每个测试方法执行前执行
         """
         try:
+            # 将 cmbird 的 logger 注册为当前上下文 logger（若不存在则为 no-op）
+            set_current_logger(getattr(self, "logger", None))
             logger.info(f"开始执行测试方法: {self._testMethodName}")
             # 记录测试开始时间
             self._test_start_time = time.perf_counter()
@@ -144,6 +144,9 @@ class BaseTest(unittest.TestCase):
                 # 防御性处理：不影响测试结果
                 logger.debug(f"记录失败信息到日志时出现异常: {str(e)}")
                 logger.debug(traceback.format_exc())
+            finally:
+                # 清理当前上下文 logger
+                clear_current_logger()
 
     def _record_failure_details(self, result) -> None:
         """

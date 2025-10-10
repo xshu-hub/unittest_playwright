@@ -4,13 +4,11 @@
 """
 from typing import Optional, Dict, List
 from playwright.sync_api import Playwright, Browser, BrowserContext, Page, sync_playwright
-from utils.logger import get_logger, setup_logging
+from utils.cmbird_logger import logger
 from config.videos_config import videos_config
 import os
 
-# 初始化日志系统（幂等）
-setup_logging()
-logger = get_logger(__name__)
+# 使用 cmbird 日志代理（由 BaseTest 在运行时注册）
 
 
 class BrowserManager:

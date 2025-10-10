@@ -4,11 +4,11 @@ import threading
 from datetime import datetime
 from typing import Optional
 
-from utils.logger import get_logger
+from utils.cmbird_logger import logger
 from utils.common import is_failed as _is_failed
 from config.videos_config import videos_config
 
-logger = get_logger(__name__)
+# 使用 cmbird 日志代理（由 BaseTest 在运行时注册）
 
 
 class VideoRecorder:

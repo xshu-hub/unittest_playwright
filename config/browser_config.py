@@ -5,11 +5,10 @@
 import os
 import yaml
 from typing import Dict, Any, Optional
-from utils.logger import get_logger
+from utils.cmbird_logger import logger
 from utils.common import load_yaml_with_default, default_config_path
 
-# 初始化日志系统
-logger = get_logger(__name__)
+# 使用 cmbird 日志代理（由 BaseTest 在运行时注册）
 
 
 class BrowserConfig:

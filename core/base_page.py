@@ -4,9 +4,7 @@ from abc import ABC, abstractmethod
 from typing import Optional, List, Dict, Any, Union, Callable, Literal
 
 from playwright.sync_api import Page, Locator, expect, Error, Cookie, FrameLocator
-from utils.logger import get_logger
-
-logger = get_logger(__name__)
+from utils.cmbird_logger import logger
 
 # 定义选择器类型
 SelectorType = Union[str, Locator]

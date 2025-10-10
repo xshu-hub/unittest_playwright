@@ -4,11 +4,6 @@ from core.base_test import BaseTest
 from pages.login_page import LoginPage
 from pages.dashboard_page import DashboardPage
 from pages.approval_pages import ApprovalCreatePage
-
-# 初始化日志系统（幂等）
-from utils.logger import get_logger
-
-logger = get_logger(__name__)
 class TestCreateApprovalSuccess(BaseTest):
     def setUp(self):
         """测试前置设置：初始化页面对象"""
