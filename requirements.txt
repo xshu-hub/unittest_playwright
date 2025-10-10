@@ -1,4 +1,3 @@
-allure-python-commons
 playwright
 PyYAML
 parameterized

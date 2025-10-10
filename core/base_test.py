@@ -16,7 +16,6 @@ from utils.logger import get_logger
 from utils.screenshot import ScreenshotHelper
 from utils.video import VideoRecorder
 from config.videos_config import videos_config
-from utils.allure.hooks import allure_hooks
 
 logger = get_logger(__name__)
 screenshot_helper = ScreenshotHelper()
@@ -30,6 +29,56 @@ class BaseTest(unittest.TestCase):
     browser_manager: Optional[BrowserManager] = None
     page: Optional[Page] = None
 
+    # ---------- 私有工具方法 ----------
+    def _init_browser_if_needed(self) -> None:
+        """按需初始化浏览器与上下文，并设置默认超时。"""
+        if not self.browser_manager:
+            logger.debug("检测到未初始化的浏览器管理器，执行按需初始化")
+            self.__class__.browser_manager = BrowserManager()
+            browser_config_data = browser_config.get_browser_config()
+            self.__class__.page = self.browser_manager.start_browser(
+                browser_type=browser_config_data.get("type", "chromium"),
+                headless=browser_config_data.get("headless", False),
+                viewport=browser_config_data.get("viewport"),
+                no_viewport=browser_config_data.get("no_viewport", False),
+                user_agent=browser_config_data.get("user_agent"),
+                locale=browser_config_data.get("locale", "zh-CN"),
+                timezone=browser_config_data.get("timezone", "Asia/Shanghai"),
+                extra_http_headers=browser_config_data.get("extra_http_headers"),
+                ignore_https_errors=browser_config_data.get("ignore_https_errors", True),
+                slow_mo=browser_config_data.get("slow_mo", 0),
+                args=browser_config_data.get("args", [])
+            )
+            timeout_config = browser_config.get_timeout_config()
+            self.browser_manager.set_default_timeout(timeout_config.get("default", 10000))
+            self.browser_manager.set_default_navigation_timeout(timeout_config.get("navigation", 30000))
+
+    def _init_page_for_test(self) -> None:
+        """为当前测试方法准备独立页面（视频启用或页面已关闭时）。"""
+        if videos_config.enabled() or (not self.page or self.page.is_closed()):
+            # 若已有页面未关闭，先关闭以避免同一测试产生两个视频
+            if self.page and not self.page.is_closed():
+                try:
+                    logger.debug("关闭上一页面以避免重复视频")
+                    self.browser_manager.close_page(self.page)
+                except Exception as e:
+                    logger.debug(f"关闭旧页面时出现异常: {str(e)}")
+                    logger.debug(traceback.format_exc())
+            logger.debug("创建新页面用于当前测试")
+            self.page = self.browser_manager.new_page()
+            self.__class__.page = self.page
+
+    def _clear_storage_and_cookies(self) -> None:
+        """清理本地存储与 Cookies，减少状态残留。"""
+        try:
+            if self.page and (not self.page.is_closed()):
+                self.page.evaluate("localStorage.clear(); sessionStorage.clear();")
+            if self.browser_manager and self.browser_manager.context:
+                self.browser_manager.context.clear_cookies()
+        except Exception as e:
+            logger.debug(f"清理存储或 Cookies 时出现异常: {str(e)}")
+            logger.debug(traceback.format_exc())
+
     def setUp(self) -> None:
         """
         测试方法级别的初始化
@@ -39,58 +88,9 @@ class BaseTest(unittest.TestCase):
             logger.info(f"开始执行测试方法: {self._testMethodName}")
             # 记录测试开始时间
             self._test_start_time = time.perf_counter()
-            
-            # 懒加载：如果类级浏览器管理器未初始化，则按需初始化
-            if not self.browser_manager:
-                logger.debug("检测到未初始化的浏览器管理器，执行按需初始化")
-                self.__class__.browser_manager = BrowserManager()
-                browser_config_data = browser_config.get_browser_config()
-                self.__class__.page = self.browser_manager.start_browser(
-                    browser_type=browser_config_data.get("type", "chromium"),
-                    headless=browser_config_data.get("headless", False),
-                    viewport=browser_config_data.get("viewport"),
-                    no_viewport=browser_config_data.get("no_viewport", False),
-                    user_agent=browser_config_data.get("user_agent"),
-                    locale=browser_config_data.get("locale", "zh-CN"),
-                    timezone=browser_config_data.get("timezone", "Asia/Shanghai"),
-                    extra_http_headers=browser_config_data.get("extra_http_headers"),
-                    ignore_https_errors=browser_config_data.get("ignore_https_errors", True),
-                    slow_mo=browser_config_data.get("slow_mo", 0),
-                    args=browser_config_data.get("args", [])
-                )
-                timeout_config = browser_config.get_timeout_config()
-                self.browser_manager.set_default_timeout(timeout_config.get("default", 10000))
-                self.browser_manager.set_default_navigation_timeout(timeout_config.get("navigation", 30000))
-                # 初始化 Allure 类容器（按需，一次性）
-                try:
-                    if not getattr(self.__class__, "_allure_cls_initialized", False):
-                        allure_hooks.on_class_setup(self.__class__.__name__, browser_config_data)
-                        setattr(self.__class__, "_allure_cls_initialized", True)
-                except Exception as e:
-                    logger.debug(f"Allure 类容器初始化失败（忽略）：{str(e)}")
-            
-            # 视频启用时，每个测试创建独立页面以生成单独视频
-            if videos_config.enabled() or (not self.page or self.page.is_closed()):
-                # 若已有页面未关闭，先关闭以避免同一测试产生两个视频
-                if self.page and not self.page.is_closed():
-                    try:
-                        logger.debug("关闭上一页面以避免重复视频")
-                        self.browser_manager.close_page(self.page)
-                    except Exception as e:
-                        logger.debug(f"关闭旧页面时出现异常: {str(e)}")
-                        logger.debug(traceback.format_exc())
-                logger.debug("创建新页面用于当前测试")
-                self.page = self.browser_manager.new_page()
-                self.__class__.page = self.page
-            
-            # 注册清理动作：在测试结束后清理浏览器存储
-            self.addCleanup(lambda: (
-                self.page and (not self.page.is_closed()) and 
-                self.page.evaluate("localStorage.clear(); sessionStorage.clear();")
-            ))
-            
-            # Allure 开始测试用例
-            allure_hooks.on_test_setup(self)
+            # 初始化浏览器与页面
+            self._init_browser_if_needed()
+            self._init_page_for_test()
             
         except Exception as e:
             logger.error(f"测试方法 {self._testMethodName} 初始化失败: {str(e)}")
@@ -124,14 +124,7 @@ class BaseTest(unittest.TestCase):
                         logger=logger,
                     )
                     # 在页面关闭生成视频之前，先清理存储与 Cookies，避免参数化用例状态残留
-                    try:
-                        if self.page and (not self.page.is_closed()):
-                            self.page.evaluate("localStorage.clear(); sessionStorage.clear();")
-                        if self.browser_manager and self.browser_manager.context:
-                            self.browser_manager.context.clear_cookies()
-                    except Exception as e:
-                        logger.debug(f"清理存储或 Cookies 时出现异常: {str(e)}")
-                        logger.debug(traceback.format_exc())
+                    self._clear_storage_and_cookies()
                     # 视频处理：保存或丢弃视频（需在页面关闭后）
                     try:
                         video_path = video_recorder.handle_test_teardown(
@@ -144,22 +137,13 @@ class BaseTest(unittest.TestCase):
                         logger.debug(f"处理测试视频时出现异常: {str(e)}")
                         logger.debug(traceback.format_exc())
                         video_path = None
-                    # Allure 附件与状态
-                    allure_hooks.on_test_teardown(self, result, screenshot_path, video_path)
+                    # 取消 Allure 集成：不再添加 Allure 附件或状态
 
                     self._log_test_summary(result)
             except Exception as e:
                 # 防御性处理：不影响测试结果
                 logger.debug(f"记录失败信息到日志时出现异常: {str(e)}")
                 logger.debug(traceback.format_exc())
-            finally:
-                # 按需清理 Allure 类容器（允许外部框架每测后回收）
-                try:
-                    if getattr(self.__class__, "_allure_cls_initialized", False):
-                        allure_hooks.on_class_teardown(self.__class__.__name__)
-                        setattr(self.__class__, "_allure_cls_initialized", False)
-                except Exception as e:
-                    logger.debug(f"Allure 类容器清理失败（忽略）：{str(e)}")
 
     def _record_failure_details(self, result) -> None:
         """
