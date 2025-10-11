@@ -82,75 +82,75 @@ class VideoRecorder:
             if (not page) or page.is_closed():
                 return None
 
-            # 根据模式决定是否保留成功用例视频
             keep_success = videos_config.record_all()
+            self._safe_close_page(page)
 
-            # 关闭页面以确保视频文件生成
-            try:
-                page.close()
-            except Exception as e:
-                logger.warning(f"关闭页面时出现异常: {e}")
-                # 即便关闭失败，继续尝试访问 video 信息
-                pass
-
-            # 视频对象获取
             video = getattr(page, "video", None)
             if not video:
                 return None
 
-            # 失败判断（统一调用公共工具）
             failed = _is_failed(result, class_name, method_name)
+            tmp_path = self._safe_get_video_path(video)
 
-            # 获取临时路径
-            try:
-                tmp_path = video.path()
-            except Exception as e:
-                logger.warning(f"获取视频路径时出现异常: {e}")
-                tmp_path = None
-
-            # 目录与目标路径
             self.ensure_dir()
             target_path = self._target_path(class_name, method_name, failed)
 
-            # 失败或保存所有：保留视频
-            if failed or keep_success:
-                try:
-                    # 优先使用 save_as 以提高原子性
-                    if hasattr(video, "save_as"):
-                        video.save_as(target_path)
-                    elif tmp_path and os.path.exists(tmp_path):
-                        # 回退到文件复制
-                        from shutil import copyfile
-                        copyfile(tmp_path, target_path)
-                    # 保存到目标路径后，删除原始哈希文件以避免重复
-                    try:
-                        if hasattr(video, "delete"):
-                            video.delete()
-                        elif tmp_path and os.path.exists(tmp_path) and tmp_path != target_path:
-                            self._retry_delete(tmp_path)
-                    except Exception as e:
-                        logger.warning(f"删除临时视频文件时出现异常: {e}")
-                    logger.error(f"测试方法 {method_name} 视频保存: {target_path}")
-                    return target_path
-                except Exception as e:
-                    logger.debug(f"保存视频时出现异常: {e}")
-                    import traceback as tb
-                    logger.debug(tb.format_exc())
-                    return None
-            else:
-                # 成功用例且仅失败模式：删除临时文件（节省空间）
-                try:
-                    if hasattr(video, "delete"):
-                        video.delete()
-                    elif tmp_path and os.path.exists(tmp_path):
-                        self._retry_delete(tmp_path)
-                except Exception as e:
-                    logger.error(f"删除临时视频文件时出现异常: {e}")
-                    # 删除失败不影响测试流程
-                    pass
+            # 仅失败模式且用例成功：删除临时视频并返回
+            if not (failed or keep_success):
+                self._safe_delete_tmp(video, tmp_path)
                 return None
+
+            # 保存视频（save_as 或复制临时文件）
+            if self._safe_save_video(video, tmp_path, target_path):
+                # 保存成功后清理临时文件
+                self._safe_delete_tmp(video, tmp_path, target_path)
+                logger.error(f"测试方法 {method_name} 视频保存: {target_path}")
+                return target_path
+
+            return None
         except Exception as e:
             logger.error(f"视频处理时出现异常: {e}")
             import traceback as tb
             logger.debug(tb.format_exc())
             return None
+
+    # 辅助方法：降低主流程嵌套深度
+    def _safe_close_page(self, page) -> None:
+        try:
+            page.close()
+        except Exception as e:
+            logger.warning(f"关闭页面时出现异常: {e}")
+
+    def _safe_get_video_path(self, video) -> Optional[str]:
+        try:
+            return video.path()
+        except Exception as e:
+            logger.warning(f"获取视频路径时出现异常: {e}")
+            return None
+
+    def _safe_save_video(self, video, tmp_path: Optional[str], target_path: str) -> bool:
+        try:
+            if hasattr(video, "save_as"):
+                video.save_as(target_path)
+                return True
+            if tmp_path and os.path.exists(tmp_path):
+                from shutil import copyfile
+                copyfile(tmp_path, target_path)
+                return True
+            return False
+        except Exception as e:
+            logger.debug(f"保存视频时出现异常: {e}")
+            import traceback as tb
+            logger.debug(tb.format_exc())
+            return False
+
+    def _safe_delete_tmp(self, video, tmp_path: Optional[str], target_path: Optional[str] = None) -> None:
+        try:
+            if hasattr(video, "delete"):
+                video.delete()
+                return
+            if tmp_path and os.path.exists(tmp_path) and (not target_path or tmp_path != target_path):
+                self._retry_delete(tmp_path)
+        except Exception as e:
+            # 删除失败不影响测试流程
+            logger.warning(f"删除临时视频文件时出现异常: {e}")
