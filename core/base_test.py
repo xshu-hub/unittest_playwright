@@ -125,19 +125,25 @@ class BaseTest(unittest.TestCase):
                     )
                     # 在页面关闭生成视频之前，先清理存储与 Cookies，避免参数化用例状态残留
                     self._clear_storage_and_cookies()
-                    # 视频处理：保存或丢弃视频（需在页面关闭后）
+                    # 视频处理：保存或丢弃视频（需在页面关闭后）；遍历所有未关闭的页面统一命名
                     try:
-                        video_path = video_recorder.handle_test_teardown(
-                            page=self.page,
-                            class_name=self.__class__.__name__,
-                            method_name=self._testMethodName,
-                            result=result,
-                        )
+                        pages = []
+                        if self.browser_manager:
+                            pages = [p for p in self.browser_manager.get_all_pages() if p and not p.is_closed()]
+                        elif self.page and not self.page.is_closed():
+                            pages = [self.page]
+
+                        for idx, p in enumerate(pages, start=1):
+                            method_tag = self._testMethodName if (p == self.page) else f"{self._testMethodName}__tab{idx}"
+                            video_recorder.handle_test_teardown(
+                                page=p,
+                                class_name=self.__class__.__name__,
+                                method_name=method_tag,
+                                result=result,
+                            )
                     except Exception as e:
-                        logger.debug(f"处理测试视频时出现异常: {str(e)}")
+                        logger.debug(f"处理多页面视频时出现异常: {str(e)}")
                         logger.debug(traceback.format_exc())
-                        video_path = None
-                    # 取消 Allure 集成：不再添加 Allure 附件或状态
 
                     self._log_test_summary(result)
             except Exception as e:
