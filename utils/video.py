@@ -82,12 +82,15 @@ class VideoRecorder:
             if (not page) or page.is_closed():
                 return None
 
-            keep_success = videos_config.record_all()
-            self._safe_close_page(page)
-
+            # 先获取 video 对象，再关闭页面（避免某些实现中关闭后 video 访问为 None）
             video = getattr(page, "video", None)
             if not video:
+                # 仍需关闭页面以落盘可能的录像，但无 video 对象则无法命名保存
+                self._safe_close_page(page)
                 return None
+
+            keep_success = videos_config.record_all()
+            self._safe_close_page(page)
 
             failed = _is_failed(result, class_name, method_name)
             tmp_path = self._safe_get_video_path(video)

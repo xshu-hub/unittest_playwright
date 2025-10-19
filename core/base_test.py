@@ -164,8 +164,22 @@ class BaseTest(unittest.TestCase):
                         elif self.page and not self.page.is_closed():
                             pages = [self.page]
 
-                        for idx, p in enumerate(pages, start=1):
-                            method_tag = self._testMethodName if (p == self.page) else f"{self._testMethodName}__tab{idx}"
+                        # 记录页面枚举信息，便于调试
+                        try:
+                            logger.debug(f"tearDown 枚举到 {len(pages)} 个未关闭页面")
+                            for i, pg in enumerate(pages, start=1):
+                                logger.debug(f"  页面[{i}]: {getattr(pg, 'url', '未知URL')}")
+                        except Exception:
+                            pass
+
+                        # 主页面使用原方法名，其余页面按出现顺序追加 __tabN（从1开始）
+                        non_main_index = 0
+                        for p in pages:
+                            if p is self.page:
+                                method_tag = self._testMethodName
+                            else:
+                                non_main_index += 1
+                                method_tag = f"{self._testMethodName}__tab{non_main_index}"
                             video_recorder.handle_test_teardown(
                                 page=p,
                                 class_name=self.__class__.__name__,

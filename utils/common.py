@@ -18,8 +18,12 @@ def is_failed(result: Any, class_name: str, method_name: str) -> bool:
     """判断指定类与方法的用例是否在本次结果中失败或错误。
 
     通过比较 TestCase.id() 的后缀是否为 "ClassName.methodName" 来定位该用例。
+    同时兼容我们为多页面视频所追加的标签后缀（例如 methodName__tab2）。
     """
     suffix = f"{class_name}.{method_name}"
+    # 兼容多页面命名：剥离 '__' 后的基方法名进行匹配
+    base_method = method_name.split("__", 1)[0]
+    suffix_alt = f"{class_name}.{base_method}"
 
     try:
         errors = list(getattr(result, "errors", []))
@@ -28,12 +32,15 @@ def is_failed(result: Any, class_name: str, method_name: str) -> bool:
         errors = []
         failures = []
 
+    def _match(test_id: str) -> bool:
+        return test_id.endswith(suffix) or test_id.endswith(suffix_alt)
+
     has_error = any(
-        (getattr(test, "id", None) and str(test.id()).endswith(suffix)) and err
+        (getattr(test, "id", None) and _match(str(test.id()))) and err
         for test, err in errors
     )
     has_failure = any(
-        (getattr(test, "id", None) and str(test.id()).endswith(suffix)) and fail
+        (getattr(test, "id", None) and _match(str(test.id()))) and fail
         for test, fail in failures
     )
     return bool(has_error or has_failure)
