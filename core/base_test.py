@@ -81,32 +81,34 @@ class BaseTest(unittest.TestCase):
         """在失败截图时选择最可能相关的页面。
         优先选择最后打开的未关闭页面；若只有一个页面或主页面仍可用且与最新页面相同，则使用主页面。
         """
-        try:
-            pages = []
-            if self.browser_manager:
+        pages = []
+        if self.browser_manager:
+            try:
                 pages = [p for p in self.browser_manager.get_all_pages() if p and not p.is_closed()]
-            elif self.page and not self.page.is_closed():
-                pages = [self.page]
+            except Exception as e:
+                logger.debug(f"枚举页面时出现异常: {e}")
+                logger.debug(traceback.format_exc())
+        elif self.page and not self.page.is_closed():
+            pages = [self.page]
 
-            if not pages:
+        if not pages:
+            return self.page
+
+        chosen = pages[-1]
+
+        # 若主页面还可用且与最新页面相同，使用主页面
+        if self.page and (not self.page.is_closed()):
+            same = False
+            try:
+                same = (chosen is self.page) or (getattr(chosen, 'url', None) == getattr(self.page, 'url', None))
+            except Exception:
+                # URL 获取异常时，保持 same=False
+                pass
+            if (len(pages) == 1) or same:
                 return self.page
 
-            chosen = pages[-1]
-            try:
-                # 若主页面还可用且与最新页面相同，使用主页面
-                if self.page and (not self.page.is_closed()):
-                    if (len(pages) == 1) or (chosen == self.page) or (getattr(chosen, 'url', None) == getattr(self.page, 'url', None)):
-                        return self.page
-            except Exception:
-                # URL 获取异常时退回最新页面
-                pass
-
-            logger.debug(f"失败截图选择最新页面: {getattr(chosen, 'url', '未知URL')}")
-            return chosen
-        except Exception as e:
-            logger.debug(f"选择失败截图页面时出现异常: {e}")
-            logger.debug(traceback.format_exc())
-            return self.page
+        logger.debug(f"失败截图选择最新页面: {getattr(chosen, 'url', '未知URL')}")
+        return chosen
 
     def setUp(self) -> None:
         """
