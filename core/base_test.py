@@ -130,74 +130,73 @@ class BaseTest(unittest.TestCase):
     
     def tearDown(self) -> None:
         """
-        测试方法级别的清理
+        测试方法级别的清理（降低嵌套深度至≤4）
         在每个测试方法执行后执行
         """
+        outcome = getattr(self, "_outcome", None)
+        result = getattr(outcome, "result", None)
         try:
-            # logger.info(f"测试方法 {self._testMethodName} 执行完成")
-            pass
+            if not result:
+                clear_current_logger()
+                return
+
+            # 记录失败详情
+            self._record_failure_details(result)
+
+            # 捕获失败截图（只对主页面）
+            screenshot_helper.capture_on_failure(
+                page=self._select_page_for_failure_screenshot(),
+                class_name=self.__class__.__name__,
+                method_name=self._testMethodName,
+                result=result,
+                logger=logger,
+            )
+
+            # 在页面关闭生成视频之前，先清理存储与 Cookies，避免参数化用例状态残留
+            self._clear_storage_and_cookies()
+
+            # 多页视频统一处理（封装函数，避免深层嵌套）
+            self._process_videos_for_pages(result)
+
+            # 输出结果摘要
+            self._log_test_summary(result)
         except Exception as e:
-            logger.error(f"测试方法 {self._testMethodName} 清理失败: {str(e)}")
+            # 防御性处理：不影响测试结果
+            logger.debug(f"tearDown 记录/处理失败信息时出现异常: {str(e)}")
             logger.debug(traceback.format_exc())
         finally:
-            # 记录失败详情与结果摘要
-            outcome = getattr(self, "_outcome", None)
-            result = getattr(outcome, "result", None)
-            try:
-                if result:
-                    self._record_failure_details(result)
-                    # 在失败场景下捕获截图（使用工具类）
-                    screenshot_path = screenshot_helper.capture_on_failure(
-                        page=self._select_page_for_failure_screenshot(),
-                        class_name=self.__class__.__name__,
-                        method_name=self._testMethodName,
-                        result=result,
-                        logger=logger,
-                    )
-                    # 在页面关闭生成视频之前，先清理存储与 Cookies，避免参数化用例状态残留
-                    self._clear_storage_and_cookies()
-                    # 视频处理：保存或丢弃视频（需在页面关闭后）；遍历所有未关闭的页面统一命名
-                    try:
-                        pages = []
-                        if self.browser_manager:
-                            pages = [p for p in self.browser_manager.get_all_pages() if p and not p.is_closed()]
-                        elif self.page and not self.page.is_closed():
-                            pages = [self.page]
+            # 清理当前上下文 logger
+            clear_current_logger()
 
-                        # 记录页面枚举信息，便于调试
-                        try:
-                            logger.debug(f"tearDown 枚举到 {len(pages)} 个未关闭页面")
-                            for i, pg in enumerate(pages, start=1):
-                                logger.debug(f"  页面[{i}]: {getattr(pg, 'url', '未知URL')}")
-                        except Exception:
-                            pass
+    def _process_videos_for_pages(self, result) -> None:
+        """遍历未关闭页面并按规则保存/丢弃视频，主页面无后缀，其他页面追加 __tabN"""
+        pages = []
+        if self.browser_manager:
+            pages = [p for p in self.browser_manager.get_all_pages() if p and not p.is_closed()]
+        elif self.page and not self.page.is_closed():
+            pages = [self.page]
 
-                        # 主页面使用原方法名，其余页面按出现顺序追加 __tabN（从1开始）
-                        non_main_index = 0
-                        for p in pages:
-                            if p is self.page:
-                                method_tag = self._testMethodName
-                            else:
-                                non_main_index += 1
-                                method_tag = f"{self._testMethodName}__tab{non_main_index}"
-                            video_recorder.handle_test_teardown(
-                                page=p,
-                                class_name=self.__class__.__name__,
-                                method_name=method_tag,
-                                result=result,
-                            )
-                    except Exception as e:
-                        logger.debug(f"处理多页面视频时出现异常: {str(e)}")
-                        logger.debug(traceback.format_exc())
+        # 调试信息（尽量不影响主流程）
+        try:
+            logger.debug(f"tearDown 枚举到 {len(pages)} 个未关闭页面")
+            for i, pg in enumerate(pages, start=1):
+                logger.debug(f"  页面[{i}]: {getattr(pg, 'url', '未知URL')}")
+        except Exception:
+            pass
 
-                    self._log_test_summary(result)
-            except Exception as e:
-                # 防御性处理：不影响测试结果
-                logger.debug(f"记录失败信息到日志时出现异常: {str(e)}")
-                logger.debug(traceback.format_exc())
-            finally:
-                # 清理当前上下文 logger
-                clear_current_logger()
+        non_main_index = 0
+        for p in pages:
+            if p is self.page:
+                method_tag = self._testMethodName
+            else:
+                non_main_index += 1
+                method_tag = f"{self._testMethodName}__tab{non_main_index}"
+            video_recorder.handle_test_teardown(
+                page=p,
+                class_name=self.__class__.__name__,
+                method_name=method_tag,
+                result=result,
+            )
 
     def _record_failure_details(self, result) -> None:
         """
