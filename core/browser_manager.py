@@ -7,9 +7,63 @@ from playwright.sync_api import Playwright, Browser, BrowserContext, Page, sync_
 from utils.cmbird_logger import logger
 from config.videos_config import videos_config
 import os
+from dataclasses import dataclass, field
+from typing import Union, Any
 
 # 使用 cmbird 日志代理（由 BaseTest 在运行时注册）
 
+
+@dataclass
+class BrowserLaunchOptions:
+    headless: bool = False
+    slow_mo: int = 0
+    args: Optional[List[str]] = None
+    extra_kwargs: Dict[str, Any] = field(default_factory=dict)
+
+    def to_dict(self) -> Dict[str, Any]:
+        # 保持与原生 launch(**options) 调用兼容
+        return {
+            "headless": self.headless,
+            "slow_mo": self.slow_mo,
+            "args": self.args or [],
+            **(self.extra_kwargs or {}),
+        }
+
+@dataclass
+class BrowserContextOptions:
+    viewport: Optional[Dict[str, int]] = None
+    locale: str = "zh-CN"
+    timezone_id: str = "Asia/Shanghai"
+    ignore_https_errors: bool = True
+    no_viewport: bool = False
+    user_agent: Optional[str] = None
+    extra_http_headers: Optional[Dict[str, Union[str, int, bool]]] = None
+    record_video_dir: Optional[str] = None
+    record_video_size: Optional[Dict[str, int]] = None
+
+    def to_dict(self) -> Dict[str, Any]:
+        d: Dict[str, Any] = {
+            "viewport": self.viewport,
+            "locale": self.locale,
+            "timezone_id": self.timezone_id,
+            "ignore_https_errors": self.ignore_https_errors,
+            "no_viewport": self.no_viewport,
+        }
+        if self.user_agent:
+            d["user_agent"] = self.user_agent
+        if self.extra_http_headers:
+            d["extra_http_headers"] = self.extra_http_headers
+        if self.record_video_dir:
+            d["record_video_dir"] = self.record_video_dir
+        if self.record_video_size:
+            d["record_video_size"] = self.record_video_size
+        return d
+
+@dataclass
+class StartOptions:
+    browser_type: str = "chromium"
+    launch: BrowserLaunchOptions = field(default_factory=BrowserLaunchOptions)
+    context: BrowserContextOptions = field(default_factory=BrowserContextOptions)
 
 class BrowserManager:
     """浏览器管理类"""
@@ -22,7 +76,8 @@ class BrowserManager:
         self.page: Optional[Page] = None
         self._is_started = False
         
-    def start_browser(self, 
+    def start_browser(self,
+                     options: Optional[StartOptions] = None,
                      browser_type: str = "chromium",
                      headless: bool = False,
                      viewport: Optional[Dict[str, int]] = None,
@@ -30,15 +85,19 @@ class BrowserManager:
                      user_agent: Optional[str] = None,
                      locale: str = "zh-CN",
                      timezone: str = "Asia/Shanghai",
-                     extra_http_headers: Optional[Dict[str, str | int | bool]] = None,
+                     extra_http_headers: Optional[Dict[str, Union[str, int, bool]]] = None,
                      ignore_https_errors: bool = True,
                      slow_mo: int = 0,
                      args: Optional[List[str]] = None,
                      **kwargs) -> Page:
         """
         启动浏览器并创建页面
+
+        支持通过 StartOptions(dataclass) 具名封装参数，同时保留原始参数以兼容旧调用。
+        StartOptions 优先级高于同名的散列参数。
         
         Args:
+            options: 具名封装的启动与上下文参数
             browser_type: 浏览器类型 (chromium, firefox, webkit)
             headless: 是否无头模式
             viewport: 视口大小 {"width": 1920, "height": 1080}
@@ -59,85 +118,87 @@ class BrowserManager:
             if self._is_started:
                 logger.warning("浏览器已经启动，将先关闭现有浏览器")
                 self.close_browser()
-                
+
             # 启动 Playwright
             self.playwright = sync_playwright().start()
-            
-            # 获取浏览器类型
-            if browser_type.lower() == "chromium":
+
+            # 解析浏览器类型（StartOptions 优先）
+            btype = (options.browser_type if options else browser_type).lower()
+            if btype == "chromium":
                 browser_launcher = self.playwright.chromium
-            elif browser_type.lower() == "firefox":
+            elif btype == "firefox":
                 browser_launcher = self.playwright.firefox
-            elif browser_type.lower() == "webkit":
+            elif btype == "webkit":
                 browser_launcher = self.playwright.webkit
             else:
-                raise ValueError(f"不支持的浏览器类型: {browser_type}")
-            
-            # 设置默认视口
-            if viewport is None:
-                viewport = {"width": 1920, "height": 1080}
+                raise ValueError(f"不支持的浏览器类型: {btype}")
 
-            # 禁用视口 (全屏模式)
-            if no_viewport is None:
-                no_viewport = False
-                
-            # 设置默认启动参数
-            if args is None:
-                args = []
-                
+            # 构造启动与上下文参数（StartOptions 优先）
+            if options:
+                launch_opts = options.launch
+                context_opts = options.context
+            else:
+                # 保持原默认行为
+                if viewport is None:
+                    viewport = {"width": 1920, "height": 1080}
+                if no_viewport is None:
+                    no_viewport = False
+                if args is None:
+                    args = []
+                launch_opts = BrowserLaunchOptions(
+                    headless=headless,
+                    slow_mo=slow_mo,
+                    args=args,
+                    extra_kwargs=kwargs or {},
+                )
+                context_opts = BrowserContextOptions(
+                    viewport=viewport,
+                    locale=locale,
+                    timezone_id=timezone,
+                    ignore_https_errors=ignore_https_errors,
+                    no_viewport=no_viewport,
+                    user_agent=user_agent,
+                    extra_http_headers=extra_http_headers,
+                )
+
             # 启动浏览器
-            browser_options = {
-                "headless": headless,
-                "slow_mo": slow_mo,
-                "args": args,
-                **kwargs
-            }
-            
+            browser_options = launch_opts.to_dict()
             self.browser = browser_launcher.launch(**browser_options)
-            logger.debug(f"浏览器 {browser_type} 启动成功")
-            
+            logger.debug(f"浏览器 {btype} 启动成功")
+
             # 创建浏览器上下文
-            context_options = {
-                "viewport": viewport,
-                "locale": locale,
-                "timezone_id": timezone,
-                "ignore_https_errors": ignore_https_errors,
-                "no_viewport": no_viewport
-            }
-            
-            if user_agent:
-                context_options["user_agent"] = user_agent
-                
-            if extra_http_headers:
-                context_options["extra_http_headers"] = extra_http_headers
-                
-            # 视频录制：根据配置启用上下文视频目录
+            context_options = context_opts.to_dict()
+
+            # 视频录制：根据配置启用上下文视频目录（若未指定则自动开启）
             try:
                 if videos_config.enabled():
-                    project_root = os.path.dirname(os.path.dirname(__file__))
-                    vdir = videos_config.directory()
-                    record_dir = vdir if os.path.isabs(vdir) else os.path.join(project_root, vdir)
-                    os.makedirs(record_dir, exist_ok=True)
-                    context_options["record_video_dir"] = record_dir
-                    size = videos_config.size()
-                    if isinstance(size, dict) and "width" in size and "height" in size:
-                        context_options["record_video_size"] = {
-                            "width": int(size["width"]),
-                            "height": int(size["height"]),
-                        }
+                    need_dir = not context_options.get("record_video_dir")
+                    need_size = not context_options.get("record_video_size")
+                    if need_dir or need_size:
+                        project_root = os.path.dirname(os.path.dirname(__file__))
+                        vdir = videos_config.directory()
+                        record_dir = vdir if os.path.isabs(vdir) else os.path.join(project_root, vdir)
+                        os.makedirs(record_dir, exist_ok=True)
+                        context_options.setdefault("record_video_dir", record_dir)
+                        size = videos_config.size()
+                        if isinstance(size, dict) and "width" in size and "height" in size:
+                            context_options.setdefault("record_video_size", {
+                                "width": int(size["width"]),
+                                "height": int(size["height"]),
+                            })
             except Exception as e:
                 logger.warning(f"视频录制上下文配置失败，将不启用视频: {str(e)}")
 
             self.context = self.browser.new_context(**context_options)
             logger.debug("浏览器上下文创建成功")
-            
+
             # 创建页面
             self.page = self.context.new_page()
             logger.debug("页面创建成功")
-            
+
             self._is_started = True
             return self.page
-            
+
         except Exception as e:
             logger.error(f"启动浏览器失败: {str(e)}")
             self.close_browser()

@@ -41,18 +41,22 @@ class ScreenshotsConfig:
         }
 
     def get(self, key: str, default: Any = None) -> Any:
+        """获取配置值。保证所有分支最终统一返回一个值（单一返回点），类型与传入 default 对齐。
+        若解析失败或键不存在，返回 default。
+        """
+        keys = key.split('.')
+        value: Any = self._config_data
         try:
-            keys = key.split('.')
-            value: Any = self._config_data
             for k in keys:
                 if isinstance(value, dict) and k in value:
                     value = value[k]
                 else:
-                    return default
-            return value
+                    value = default
+                    break
         except Exception as e:
             logger.error(f"获取 Screenshots 配置值失败: {key}, 错误: {str(e)}")
-            return default
+            value = default
+        return value
 
     # 截图配置访问方法
     def get_screenshot_config(self) -> Dict[str, Any]:
